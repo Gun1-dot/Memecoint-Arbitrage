@@ -2,7 +2,7 @@ import requests
 import os
 
 MEME_TOKEN_NAME = "pepe"
-PRICE_DIFF_THRESHOLD = 0.5  # percent
+PRICE_DIFF_THRESHOLD = 0.01 # percent
 
 def get_token_data(token_name):
     url = f"https://api.dexscreener.com/latest/dex/search/?q={token_name}"
