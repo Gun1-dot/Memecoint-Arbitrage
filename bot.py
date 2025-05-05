@@ -48,3 +48,5 @@ def find_arbitrage_opportunities(token_name):
         send_telegram(msg)
 
 find_arbitrage_opportunities(MEME_TOKEN_NAME)
+send_telegram("✅ Test Message: Memecoin Arbitrage Bot is working!")
+
