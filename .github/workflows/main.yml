@@ -1,25 +1,20 @@
-name: Run Memecoin Alert Bot Every 5min
+name: Run Arbitrage Bot Every 5min
 
 on:
   schedule:
-    - cron: "*/5 * * * *"  # ⏱️ every 5 minutes
-  workflow_dispatch:      # ▶️ manual run if needed
+    - cron: "*/5 * * * *"
+  workflow_dispatch:
 
 jobs:
   run-bot:
     runs-on: ubuntu-latest
-
     steps:
-      - name: 📥 Checkout repository
-        uses: actions/checkout@v3
-
-      - name: 🐍 Set up Python
+      - uses: actions/checkout@v3
+      - name: Set up Python
         uses: actions/setup-python@v4
         with:
-          python-version: "3.11"
-
-      - name: 📦 Install dependencies
-        run: pip install requests
-
-      - name: 🚀 Run memecoin alert bot
-        run: python memecoin_alert_bot.py
+          python-version: '3.11'
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+      - name: Run bot
+        run: python bot.py
