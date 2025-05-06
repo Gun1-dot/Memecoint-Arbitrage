@@ -1,55 +1,93 @@
 import requests
 import os
+import time
 
-TOKEN_LIST = ["pepe", "bome", "wif", "doge", "shib"]
-PRICE_DIFF_THRESHOLD = 0.5  # percent
-LIQUIDITY_THRESHOLD = 10000  # USD
+VOLUME_SPIKE_THRESHOLD = 300
+PRICE_SPIKE_THRESHOLD = 20
+LIQUIDITY_THRESHOLD = 10000
+FDV_MAX = 5_000_000
+MIN_SCORE = 3
+SLEEP_INTERVAL = 300  # 5 minutes
 
-def get_token_data(token_name):
-    url = f"https://api.dexscreener.com/latest/dex/search/?q={token_name}"
+def get_new_listings():
+    url = "https://api.dexscreener.com/latest/dex/pairs"
     response = requests.get(url)
-    return response.json()
+    if response.status_code == 200:
+        return response.json().get("pairs", [])
+    return []
 
 def send_telegram(msg):
     token = os.environ["TELEGRAM_TOKEN"]
     chat_id = os.environ["TELEGRAM_CHAT_ID"]
     url = f"https://api.telegram.org/bot{token}/sendMessage"
-    requests.post(url, data={"chat_id": chat_id, "text": msg})
+    requests.post(url, data={"chat_id": chat_id, "text": msg, "parse_mode": "Markdown"})
 
-def find_arbitrage(token_name):
-    data = get_token_data(token_name)
-    pairs = data.get("pairs", [])
-    prices = []
+def analyze_pair(p):
+    score = 0
+    summary = []
 
-    for p in pairs:
-        try:
-            price = float(p["priceUsd"])
-            dex = p["dexId"]
-            chain = p["chainId"]
-            url = p["url"]
-            liquidity = float(p["liquidity"]["usd"])
-            if liquidity >= LIQUIDITY_THRESHOLD:
-                prices.append((price, dex, chain, url, liquidity))
-        except:
-            continue
+    try:
+        volume_change = float(p.get("volume24hChange", 0))
+        if volume_change > VOLUME_SPIKE_THRESHOLD:
+            score += 2
+            summary.append(f"🔥 Volume spike: {volume_change:.1f}%")
 
-    if len(prices) < 2:
-        return
+        price_change = float(p.get("priceChange", {}).get("h15", 0))
+        if price_change > PRICE_SPIKE_THRESHOLD:
+            score += 2
+            summary.append(f"🚀 Price surge: {price_change:.1f}%")
 
-    prices.sort()
-    lowest = prices[0]
-    highest = prices[-1]
-    diff_pct = ((highest[0] - lowest[0]) / lowest[0]) * 100
+        liquidity = float(p.get("liquidity", {}).get("usd", 0))
+        if liquidity > LIQUIDITY_THRESHOLD:
+            score += 1
+            summary.append(f"💧 Liquidity: ${liquidity:,.0f}")
 
-    if diff_pct >= PRICE_DIFF_THRESHOLD:
-        msg = (
-            f"🚨 Arbitrage Detected for {token_name.upper()}\n"
-            f"Buy on {lowest[1]} ({lowest[2]}) at ${lowest[0]:.8f} (liq: ${lowest[4]:,.0f})\n"
-            f"Sell on {highest[1]} ({highest[2]}) at ${highest[0]:.8f} (liq: ${highest[4]:,.0f})\n"
-            f"Spread: {diff_pct:.2f}%\n"
-            f"Buy URL: {lowest[3]}\nSell URL: {highest[3]}"
-        )
-        send_telegram(msg)
+        fdv = float(p.get("fdv", 0))
+        if fdv < FDV_MAX:
+            score += 1
+            summary.append(f"📉 MCap: ${fdv:,.0f}")
 
-for token in TOKEN_LIST:
-    find_arbitrage(token)
+        txns = p.get("txns", {}).get("h1", {})
+        buys = int(txns.get("buys", 0))
+        sells = int(txns.get("sells", 1))
+        if buys / (buys + sells) > 0.85:
+            score += 1
+            summary.append(f"🟢 Buy ratio: {buys}/{sells}")
+
+        age_ms = int(p.get("pairCreatedAt", 0))
+        age_minutes = (time.time() * 1000 - age_ms) / 60000
+        if age_minutes < 1440:
+            score += 1
+            summary.append("🍼 New token (<24h)")
+
+        return score, summary
+    except:
+        return 0, []
+
+def run_bot():
+    seen_urls = set()
+    while True:
+        print("🔄 Checking new listings...")
+        pairs = get_new_listings()
+        for p in pairs:
+            url = p.get("url")
+            if url in seen_urls:
+                continue
+            score, summary = analyze_pair(p)
+            if score >= MIN_SCORE:
+                seen_urls.add(url)
+                name = p["baseToken"]["name"]
+                symbol = p["baseToken"]["symbol"]
+                price = p["priceUsd"]
+                chain = p["chainId"]
+                dex = p["dexId"]
+                msg = (
+                    f"📈 *{name} ({symbol})* on *{chain}* [{dex}]\n"
+                    f"Score: {score}/9\n"
+                    + "\n".join(summary) +
+                    f"\n\n💸 Price: ${price}\n🔗 [Buy here]({url})"
+                )
+                send_telegram(msg)
+        time.sleep(SLEEP_INTERVAL)
+
+run_bot()
