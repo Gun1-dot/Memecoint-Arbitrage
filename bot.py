@@ -4,6 +4,7 @@ import os
 TOKEN_LIST = ["pepe", "bome", "wif", "doge", "shib"]
 PRICE_DIFF_THRESHOLD = 0.5  # percent
 LIQUIDITY_THRESHOLD = 10000  # USD
+VALID_CHAINS = ["solana", "ethereum"]  # only show opportunities on these chains
 
 def get_token_data(token_name):
     url = f"https://api.dexscreener.com/latest/dex/search/?q={token_name}"
@@ -41,7 +42,10 @@ def find_arbitrage(token_name):
     highest = prices[-1]
     diff_pct = ((highest[0] - lowest[0]) / lowest[0]) * 100
 
-    if diff_pct >= PRICE_DIFF_THRESHOLD:
+    if (
+        diff_pct >= PRICE_DIFF_THRESHOLD
+        and (lowest[2].lower() in VALID_CHAINS or highest[2].lower() in VALID_CHAINS)
+    ):
         msg = (
             f"🚨 Arbitrage Detected for {token_name.upper()}\n"
             f"Buy on {lowest[1]} ({lowest[2]}) at ${lowest[0]:.8f} (liq: ${lowest[4]:,.0f})\n"
@@ -51,6 +55,5 @@ def find_arbitrage(token_name):
         )
         send_telegram(msg)
 
-# Loop through multiple tokens
 for token in TOKEN_LIST:
     find_arbitrage(token)
