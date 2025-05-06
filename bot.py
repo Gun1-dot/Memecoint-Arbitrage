@@ -1,58 +1,61 @@
 import requests
+import os
 
-# ✅ Your hardcoded Telegram credentials
+# Use your actual bot token and chat ID
 TELEGRAM_TOKEN = "8115132882:AAGMHQovlrHYKS7tYG6yLbLkEb1SSzooBTo"
 TELEGRAM_CHAT_ID = "7685414166"
+PRICE_DIFF_THRESHOLD = 0.01  # 1%
+
+def get_token_data(token_name):
+    url = f"https://api.dexscreener.com/latest/dex/search/?q={token_name}"
+    response = requests.get(url)
+    return response.json()
 
 def send_telegram(msg):
     url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
-    data = {
-        "chat_id": TELEGRAM_CHAT_ID,
-        "text": msg,
-        "parse_mode": "HTML"
-    }
-    res = requests.post(url, data=data)
-    print("Telegram response:", res.text)
+    data = {"chat_id": TELEGRAM_CHAT_ID, "text": msg}
+    requests.post(url, data=data)
 
-def check_dexscreener():
-    url = "https://api.dexscreener.com/latest/dex/pairs"
-    response = requests.get(url)
-    if response.status_code != 200:
-        send_telegram("❌ Failed to fetch data from Dexscreener API.")
+def find_arbitrage_opportunities(token_name):
+    data = get_token_data(token_name)
+    pairs = data.get("pairs", [])
+    prices = []
+
+    for p in pairs:
+        try:
+            price_usd = float(p["priceUsd"])
+            dex = p["dexId"]
+            chain = p["chainId"]
+            url = p["url"]
+            liquidity = p.get("liquidity", {}).get("usd", "N/A")
+            prices.append((price_usd, dex, chain, url, liquidity))
+        except:
+            continue
+
+    prices.sort()
+    if len(prices) < 2:
         return
 
-    pairs = response.json().get("pairs", [])[:50]  # scan top 50
-    found = False
+    low = prices[0]
+    high = prices[-1]
+    spread = (high[0] - low[0]) / low[0]
 
-    for token in pairs:
-        try:
-            name = token.get("baseToken", {}).get("name", "?")
-            symbol = token.get("baseToken", {}).get("symbol", "?")
-            price = float(token.get("priceUsd", 0))
-            change = float(token.get("priceChange", {}).get("m15", 0))
-            volume = float(token.get("volume", {}).get("m5", 0))
-            mcap = float(token.get("fdv", 0))
-            link = token.get("url", "")
+    if spread > PRICE_DIFF_THRESHOLD:
+        msg = (
+            f"🚨 Arbitrage Detected for {token_name.upper()}\n"
+            f"Buy on {low[1]} ({low[2]}) at ${low[0]:.8f} (liq: ${low[4]})\n"
+            f"Sell on {high[1]} ({high[2]}) at ${high[0]:.8f} (liq: ${high[4]})\n"
+            f"Spread: {spread * 100:.2f}%\n"
+            f"Buy URL: {low[3]}\n"
+            f"Sell URL: {high[3]}"
+        )
+        send_telegram(msg)
 
-            # Basic filter logic: price pump + low mcap + high 5m volume
-            if change > 20 and volume > 3000 and mcap < 5_000_000:
-                found = True
-                msg = f"""
-🚀 <b>Opportunity Detected!</b>
-Token: {symbol} ({name})
-Price: ${price:.6f}
-15m Change: +{change:.2f}%
-5m Volume: ${volume:,.0f}
-Market Cap: ${mcap:,.0f}
-<a href="{link}">🔗 View on Dexscreener</a>
-                """.strip()
-                send_telegram(msg)
-
-        except Exception as e:
-            print("Error scanning token:", e)
-
-    if not found:
-        send_telegram("✅ Bot ran. No high-potential memecoin opportunities found.")
+def main():
+    print("✅ Bot started")
+    token_list = ["pepe", "shib", "doge", "floki", "baby", "elon", "jeet", "rekt", "moon", "snek"]
+    for token in token_list:
+        find_arbitrage_opportunities(token)
 
 if __name__ == "__main__":
-    check_dexscreener()
+    main()
