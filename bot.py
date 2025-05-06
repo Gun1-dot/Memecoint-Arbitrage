@@ -1,8 +1,6 @@
 import requests
-import os
-from datetime import datetime
 
-# ✅ Your Telegram bot credentials
+# ✅ Your hardcoded Telegram credentials
 TELEGRAM_TOKEN = "8115132882:AAGMHQovlrHYKS7tYG6yLbLkEb1SSzooBTo"
 TELEGRAM_CHAT_ID = "7685414166"
 
@@ -11,59 +9,50 @@ def send_telegram(msg):
     data = {
         "chat_id": TELEGRAM_CHAT_ID,
         "text": msg,
-        "parse_mode": "Markdown"
+        "parse_mode": "HTML"
     }
-    requests.post(url, data=data)
+    res = requests.post(url, data=data)
+    print("Telegram response:", res.text)
 
-def is_high_opportunity(token):
-    try:
-        vol_5m = float(token.get("volume", {}).get("m5", 0))
-        price_change = float(token.get("priceChange", {}).get("m15", 0))
-        mcap = float(token.get("fdv", 0))
-        buy_tx = int(token.get("txns", {}).get("m30", {}).get("buys", 0))
-        sell_tx = int(token.get("txns", {}).get("m30", {}).get("sells", 0))
-        buy_ratio = (buy_tx / (buy_tx + sell_tx)) * 100 if (buy_tx + sell_tx) > 0 else 0
-        return vol_5m > 3000 and 20 <= price_change <= 100 and mcap < 5000000 and buy_ratio > 85
-    except:
-        return False
-
-def main():
+def check_dexscreener():
     url = "https://api.dexscreener.com/latest/dex/pairs"
     response = requests.get(url)
     if response.status_code != 200:
-        send_telegram("⚠️ Failed to fetch Dexscreener data.")
+        send_telegram("❌ Failed to fetch data from Dexscreener API.")
         return
 
-    tokens = response.json().get("pairs", [])
-    hot_tokens = [t for t in tokens if is_high_opportunity(t)]
+    pairs = response.json().get("pairs", [])[:50]  # scan top 50
+    found = False
 
-    if not hot_tokens:
-        print("✅ No strong opportunities now.")
-        return
+    for token in pairs:
+        try:
+            name = token.get("baseToken", {}).get("name", "?")
+            symbol = token.get("baseToken", {}).get("symbol", "?")
+            price = float(token.get("priceUsd", 0))
+            change = float(token.get("priceChange", {}).get("m15", 0))
+            volume = float(token.get("volume", {}).get("m5", 0))
+            mcap = float(token.get("fdv", 0))
+            link = token.get("url", "")
 
-    for token in hot_tokens:
-        name = token.get("baseToken", {}).get("name", "?")
-        symbol = token.get("baseToken", {}).get("symbol", "?")
-        price = token.get("priceUsd", "?")
-        vol = token.get("volume", {}).get("m5", "?")
-        change = token.get("priceChange", {}).get("m15", "?")
-        mcap = token.get("fdv", "?")
-        buys = token.get("txns", {}).get("m30", {}).get("buys", 0)
-        sells = token.get("txns", {}).get("m30", {}).get("sells", 0)
-        link = token.get("url", "")
+            # Basic filter logic: price pump + low mcap + high 5m volume
+            if change > 20 and volume > 3000 and mcap < 5_000_000:
+                found = True
+                msg = f"""
+🚀 <b>Opportunity Detected!</b>
+Token: {symbol} ({name})
+Price: ${price:.6f}
+15m Change: +{change:.2f}%
+5m Volume: ${volume:,.0f}
+Market Cap: ${mcap:,.0f}
+<a href="{link}">🔗 View on Dexscreener</a>
+                """.strip()
+                send_telegram(msg)
 
-        msg = f"""
-🔥 *Opportunity Detected for {symbol}!*
-Name: {name}
-Price: ${price}
-5m Volume: {vol}
-15m Change: {change}%
-Market Cap: ${mcap}
-Buy/Sell (30m): {buys}/{sells}
-[🔗 Chart]({link})
-        """.strip()
+        except Exception as e:
+            print("Error scanning token:", e)
 
-        send_telegram(msg)
+    if not found:
+        send_telegram("✅ Bot ran. No high-potential memecoin opportunities found.")
 
 if __name__ == "__main__":
-    main()
+    check_dexscreener()
