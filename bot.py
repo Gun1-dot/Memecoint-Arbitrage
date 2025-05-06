@@ -1,17 +1,16 @@
 import requests
 import time
 
-# 🔐 Hardcoded Telegram credentials from your Meme Arbitrage project
+# Your Telegram credentials
 TELEGRAM_TOKEN = "8115132882:AAGMHQovlrHYKS7tYG6yLbLkEb1SSzooBTo"
 TELEGRAM_CHAT_ID = "7685414166"
 
-# 📊 Settings
+# Bot logic thresholds
 VOLUME_SPIKE_THRESHOLD = 300
 PRICE_SPIKE_THRESHOLD = 20
 LIQUIDITY_THRESHOLD = 10000
 FDV_MAX = 5_000_000
 MIN_SCORE = 3
-SLEEP_INTERVAL = 300  # 5 minutes
 
 def get_new_listings():
     url = "https://api.dexscreener.com/latest/dex/pairs"
@@ -22,7 +21,12 @@ def get_new_listings():
 
 def send_telegram(msg):
     url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
-    requests.post(url, data={"chat_id": TELEGRAM_CHAT_ID, "text": msg, "parse_mode": "Markdown"})
+    res = requests.post(url, data={
+        "chat_id": TELEGRAM_CHAT_ID,
+        "text": msg,
+        "parse_mode": "Markdown"
+    })
+    print("Telegram Response:", res.text)
 
 def analyze_pair(p):
     score = 0
@@ -67,29 +71,26 @@ def analyze_pair(p):
         return 0, []
 
 def run_bot():
-    seen_urls = set()
-    while True:
-        print("🔄 Checking new listings...")
-        pairs = get_new_listings()
-        for p in pairs:
-            url = p.get("url")
-            if url in seen_urls:
-                continue
-            score, summary = analyze_pair(p)
-            if score >= MIN_SCORE:
-                seen_urls.add(url)
-                name = p["baseToken"]["name"]
-                symbol = p["baseToken"]["symbol"]
-                price = p["priceUsd"]
-                chain = p["chainId"]
-                dex = p["dexId"]
-                msg = (
-                    f"📈 *{name} ({symbol})* on *{chain}* [{dex}]\n"
-                    f"Score: {score}/9\n"
-                    + "\n".join(summary) +
-                    f"\n\n💸 Price: ${price}\n🔗 [Buy here]({url})"
-                )
-                send_telegram(msg)
-        time.sleep(SLEEP_INTERVAL)
+    seen = set()
+    pairs = get_new_listings()
+    for p in pairs:
+        url = p.get("url")
+        if url in seen:
+            continue
+        score, summary = analyze_pair(p)
+        if score >= MIN_SCORE:
+            seen.add(url)
+            name = p["baseToken"]["name"]
+            symbol = p["baseToken"]["symbol"]
+            price = p["priceUsd"]
+            chain = p["chainId"]
+            dex = p["dexId"]
+            msg = (
+                f"📈 *{name} ({symbol})* on *{chain}* [{dex}]\n"
+                f"Score: {score}/9\n"
+                + "\n".join(summary) +
+                f"\n\n💸 Price: ${price}\n🔗 [Buy here]({url})"
+            )
+            send_telegram(msg)
 
 run_bot()
