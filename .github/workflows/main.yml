@@ -1,8 +1,7 @@
-name: Run Arbitrage Bot Every 15s
-
+name: Run Arbitrage Bot Every 5min
 on:
   schedule:
-    - cron: "*/1 * * * *"  # Runs every minute
+    - cron: "*/5 * * * *"  # every 5 minutes
   workflow_dispatch:
 
 jobs:
@@ -13,18 +12,8 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v4
         with:
-          python-version: "3.x"
+          python-version: "3.11"
       - name: Install dependencies
         run: pip install -r requirements.txt
-      - name: Run script 4x (simulate every 15s)
-        run: |
-          python bot.py
-          sleep 15
-          python bot.py
-          sleep 15
-          python bot.py
-          sleep 15
-          python bot.py
-        env:
-          TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
-          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+      - name: Run bot.py
+        run: python bot.py
