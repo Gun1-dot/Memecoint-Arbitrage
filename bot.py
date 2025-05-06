@@ -1,96 +1,69 @@
 import requests
-import time
+import os
+from datetime import datetime
 
-# Your Telegram credentials
+# ✅ Your Telegram bot credentials
 TELEGRAM_TOKEN = "8115132882:AAGMHQovlrHYKS7tYG6yLbLkEb1SSzooBTo"
 TELEGRAM_CHAT_ID = "7685414166"
 
-# Bot logic thresholds
-VOLUME_SPIKE_THRESHOLD = 300
-PRICE_SPIKE_THRESHOLD = 20
-LIQUIDITY_THRESHOLD = 10000
-FDV_MAX = 5_000_000
-MIN_SCORE = 3
-
-def get_new_listings():
-    url = "https://api.dexscreener.com/latest/dex/pairs"
-    response = requests.get(url)
-    if response.status_code == 200:
-        return response.json().get("pairs", [])
-    return []
-
 def send_telegram(msg):
     url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
-    res = requests.post(url, data={
+    data = {
         "chat_id": TELEGRAM_CHAT_ID,
         "text": msg,
         "parse_mode": "Markdown"
-    })
-    print("Telegram Response:", res.text)
+    }
+    requests.post(url, data=data)
 
-def analyze_pair(p):
-    score = 0
-    summary = []
-
+def is_high_opportunity(token):
     try:
-        volume_change = float(p.get("volume24hChange", 0))
-        if volume_change > VOLUME_SPIKE_THRESHOLD:
-            score += 2
-            summary.append(f"🔥 Volume spike: {volume_change:.1f}%")
-
-        price_change = float(p.get("priceChange", {}).get("h15", 0))
-        if price_change > PRICE_SPIKE_THRESHOLD:
-            score += 2
-            summary.append(f"🚀 Price surge: {price_change:.1f}%")
-
-        liquidity = float(p.get("liquidity", {}).get("usd", 0))
-        if liquidity > LIQUIDITY_THRESHOLD:
-            score += 1
-            summary.append(f"💧 Liquidity: ${liquidity:,.0f}")
-
-        fdv = float(p.get("fdv", 0))
-        if fdv < FDV_MAX:
-            score += 1
-            summary.append(f"📉 MCap: ${fdv:,.0f}")
-
-        txns = p.get("txns", {}).get("h1", {})
-        buys = int(txns.get("buys", 0))
-        sells = int(txns.get("sells", 1))
-        if buys / (buys + sells) > 0.85:
-            score += 1
-            summary.append(f"🟢 Buy ratio: {buys}/{sells}")
-
-        age_ms = int(p.get("pairCreatedAt", 0))
-        age_minutes = (time.time() * 1000 - age_ms) / 60000
-        if age_minutes < 1440:
-            score += 1
-            summary.append("🍼 New token (<24h)")
-
-        return score, summary
+        vol_5m = float(token.get("volume", {}).get("m5", 0))
+        price_change = float(token.get("priceChange", {}).get("m15", 0))
+        mcap = float(token.get("fdv", 0))
+        buy_tx = int(token.get("txns", {}).get("m30", {}).get("buys", 0))
+        sell_tx = int(token.get("txns", {}).get("m30", {}).get("sells", 0))
+        buy_ratio = (buy_tx / (buy_tx + sell_tx)) * 100 if (buy_tx + sell_tx) > 0 else 0
+        return vol_5m > 3000 and 20 <= price_change <= 100 and mcap < 5000000 and buy_ratio > 85
     except:
-        return 0, []
+        return False
 
-def run_bot():
-    seen = set()
-    pairs = get_new_listings()
-    for p in pairs:
-        url = p.get("url")
-        if url in seen:
-            continue
-        score, summary = analyze_pair(p)
-        if score >= MIN_SCORE:
-            seen.add(url)
-            name = p["baseToken"]["name"]
-            symbol = p["baseToken"]["symbol"]
-            price = p["priceUsd"]
-            chain = p["chainId"]
-            dex = p["dexId"]
-            msg = (
-                f"📈 *{name} ({symbol})* on *{chain}* [{dex}]\n"
-                f"Score: {score}/9\n"
-                + "\n".join(summary) +
-                f"\n\n💸 Price: ${price}\n🔗 [Buy here]({url})"
-            )
-            send_telegram(msg)
+def main():
+    url = "https://api.dexscreener.com/latest/dex/pairs"
+    response = requests.get(url)
+    if response.status_code != 200:
+        send_telegram("⚠️ Failed to fetch Dexscreener data.")
+        return
 
-run_bot()
+    tokens = response.json().get("pairs", [])
+    hot_tokens = [t for t in tokens if is_high_opportunity(t)]
+
+    if not hot_tokens:
+        print("✅ No strong opportunities now.")
+        return
+
+    for token in hot_tokens:
+        name = token.get("baseToken", {}).get("name", "?")
+        symbol = token.get("baseToken", {}).get("symbol", "?")
+        price = token.get("priceUsd", "?")
+        vol = token.get("volume", {}).get("m5", "?")
+        change = token.get("priceChange", {}).get("m15", "?")
+        mcap = token.get("fdv", "?")
+        buys = token.get("txns", {}).get("m30", {}).get("buys", 0)
+        sells = token.get("txns", {}).get("m30", {}).get("sells", 0)
+        link = token.get("url", "")
+
+        msg = f"""
+🔥 *Opportunity Detected for {symbol}!*
+Name: {name}
+Price: ${price}
+5m Volume: {vol}
+15m Change: {change}%
+Market Cap: ${mcap}
+Buy/Sell (30m): {buys}/{sells}
+[🔗 Chart]({link})
+        """.strip()
+
+        send_telegram(msg)
+
+if __name__ == "__main__":
+    main()
