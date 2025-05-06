@@ -1,0 +1,15 @@
+name: Test Telegram
+
+on: workflow_dispatch
+
+jobs:
+  telegram-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.11"
+      - name: Run Telegram Test
+        run: python test_telegram.py
