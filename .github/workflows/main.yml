@@ -2,24 +2,24 @@ name: Run Memecoin Alert Bot Every 5min
 
 on:
   schedule:
-    - cron: "*/5 * * * *"  # runs every 5 minutes
-  workflow_dispatch:
+    - cron: "*/5 * * * *"  # ⏱️ every 5 minutes
+  workflow_dispatch:      # ▶️ manual run if needed
 
 jobs:
   run-bot:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout repo
+      - name: 📥 Checkout repository
         uses: actions/checkout@v3
 
-      - name: Set up Python
+      - name: 🐍 Set up Python
         uses: actions/setup-python@v4
         with:
           python-version: "3.11"
 
-      - name: Install dependencies
+      - name: 📦 Install dependencies
         run: pip install requests
 
-      - name: Run memecoin alert bot
+      - name: 🚀 Run memecoin alert bot
         run: python memecoin_alert_bot.py
