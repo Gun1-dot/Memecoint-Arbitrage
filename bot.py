@@ -1,7 +1,11 @@
 import requests
-import os
 import time
 
+# 🔐 Hardcoded Telegram credentials from your Meme Arbitrage project
+TELEGRAM_TOKEN = "8115132882:AAGMHQovlrHYKS7tYG6yLbLkEb1SSzooBTo"
+TELEGRAM_CHAT_ID = "7685414166"
+
+# 📊 Settings
 VOLUME_SPIKE_THRESHOLD = 300
 PRICE_SPIKE_THRESHOLD = 20
 LIQUIDITY_THRESHOLD = 10000
@@ -17,10 +21,8 @@ def get_new_listings():
     return []
 
 def send_telegram(msg):
-    token = os.environ["TELEGRAM_TOKEN"]
-    chat_id = os.environ["TELEGRAM_CHAT_ID"]
-    url = f"https://api.telegram.org/bot{token}/sendMessage"
-    requests.post(url, data={"chat_id": chat_id, "text": msg, "parse_mode": "Markdown"})
+    url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
+    requests.post(url, data={"chat_id": TELEGRAM_CHAT_ID, "text": msg, "parse_mode": "Markdown"})
 
 def analyze_pair(p):
     score = 0
